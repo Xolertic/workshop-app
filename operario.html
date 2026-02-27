@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Operario – Workshop App</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 28px 24px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+    .step { display: none; }
+    .step.active { display: block; }
+    h2 { font-size: 22px; margin-bottom: 6px; color: #1a1a2e; }
+    .sub { color: #6b7280; font-size: 14px; margin-bottom: 20px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #444; margin-bottom: 6px; margin-top: 14px; }
+    input { width: 100%; padding: 12px 16px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; outline: none; }
+    input:focus { border-color: #4f46e5; }
+    .btn { width: 100%; padding: 16px; background: #4f46e5; color: white; border: none; border-radius: 12px; font-size: 17px; font-weight: 700; cursor: pointer; margin-top: 16px; }
+    .btn:active { opacity: 0.85; }
+    .btn-green { background: #25D366; }
+    .btn-red { background: #dc2626; }
+    .btn-gray { background: #6b7280; margin-top: 10px; }
+    .info-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+    .info-box .lbl { font-size: 11px; color: #6b7280; font-weight: 700; text-transform: uppercase; }
+    .info-box .val { font-size: 16px; font-weight: 700; color: #1e40af; margin-top: 3px; }
+    .error { background: #fee2e2; color: #b91c1c; padding: 12px; border-radius: 8px; font-size: 14px; margin-top: 14px; }
+    video { width: 100%; border-radius: 10px; background: #000; margin: 12px 0; max-height: 300px; }
+    .timer { text-align: center; font-size: 48px; font-weight: 800; color: #dc2626; margin: 8px 0; }
+    .rec-indicator { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px; font-weight: 700; color: #dc2626; font-size: 15px; }
+    .dot { width: 12px; height: 12px; background: #dc2626; border-radius: 50%; animation: blink 1s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+    .success-icon { font-size: 72px; text-align: center; margin: 16px 0; }
+    .whatsapp-note { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 14px; font-size: 14px; color: #166534; margin-bottom: 16px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+<div class="card">
+
+  <div class="step active" id="step-info">
+    <h2>📋 Trabajo</h2>
+    <p class="sub">Información del formato escaneado</p>
+    <div class="info-box">
+      <div class="lbl">Proyecto</div>
+      <div class="val" id="info-proyecto">Cargando...</div>
+    </div>
+    <div class="info-box">
+      <div class="lbl">Formato</div>
+      <div class="val" id="info-formato">Cargando...</div>
+    </div>
+    <button class="btn" onclick="irAGrabar()">🎬 Grabar vídeo</button>
+    <div id="info-error"></div>
+  </div>
+
+  <div class="step" id="step-grabar">
+    <div class="rec-indicator"><div class="dot"></div> GRABANDO</div>
+    <div class="timer" id="timer">0:00</div>
+    <video id="video-live" autoplay muted playsinline></video>
+    <button class="btn btn-red" onclick="pararGrabacion()">⏹ Parar grabación</button>
+    <button class="btn btn-gray" onclick="cancelar()">Cancelar</button>
+  </div>
+
+  <div class="step" id="step-confirmar">
+    <h2>✅ Confirmar</h2>
+    <p class="sub">Revisa el vídeo y el título</p>
+    <video id="video-replay" controls playsinline></video>
+    <label>Título del vídeo</label>
+    <input id="titulo" type="text" />
+    <div class="whatsapp-note">
+      📲 Al pulsar <strong>"Enviar por WhatsApp"</strong>, el vídeo se descargará en tu móvil y se abrirá WhatsApp con el mensaje listo. Solo adjunta el vídeo desde tu galería y pulsa <strong>Enviar</strong>.
+    </div>
+    <button class="btn btn-green" onclick="enviarWhatsApp()">💬 Enviar por WhatsApp</button>
+    <button class="btn btn-gray" onclick="repetir()">🔄 Repetir grabación</button>
+  </div>
+
+  <div class="step" id="step-exito">
+    <div class="success-icon">🎉</div>
+    <h2 style="text-align:center">¡Listo!</h2>
+    <p class="sub" style="text-align:center; margin-bottom:20px">Adjunta el vídeo descargado en WhatsApp y pulsa <strong>Enviar</strong>.</p>
+    <button class="btn btn-green" onclick="reiniciar()">➕ Grabar otro vídeo</button>
+  </div>
+
+</div>
+
+<script>
+  const WHATSAPP_NUMERO = "34606664908";
+
+  let mediaRecorder = null;
+  let chunks = [];
+  let videoBlob = null;
+  let stream = null;
+  let timerInterval = null;
+  let segundos = 0;
+  let formatoData = null;
+
+  function showStep(id) {
+    document.querySelectorAll(".step").forEach(s => s.classList.remove("active"));
+    document.getElementById(id).classList.add("active");
+  }
+
+  function limpiarTexto(t) {
+    return (t || "").replace(/[\/\\:*?"<>|]/g, "_").replace(/\s+/g, "_");
+  }
+
+  window.onload = () => {
+    const params = new URLSearchParams(window.location.search);
+    const proyecto = params.get("proyecto") || "";
+    const formato = params.get("formato") || "";
+    const ot = params.get("ot") || "";
+    formatoData = { proyecto, formato, ot };
+    document.getElementById("info-proyecto").textContent = ot ? ot + " – " + proyecto : proyecto || "Sin proyecto";
+    document.getElementById("info-formato").textContent = formato || "Sin formato";
+  };
+
+  async function irAGrabar() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true });
+      document.getElementById("video-live").srcObject = stream;
+      chunks = [];
+      const tipo = MediaRecorder.isTypeSupported("video/mp4") ? "video/mp4" : "video/webm";
+      mediaRecorder = new MediaRecorder(stream, { mimeType: tipo });
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      mediaRecorder.onstop = procesarVideo;
+      mediaRecorder.start();
+      segundos = 0;
+      timerInterval = setInterval(() => {
+        segundos++;
+        const m = Math.floor(segundos / 60);
+        const s = segundos % 60;
+        document.getElementById("timer").textContent = m + ":" + s.toString().padStart(2, "0");
+      }, 1000);
+      showStep("step-grabar");
+    } catch (e) {
+      document.getElementById("info-error").innerHTML = '<div class="error">❌ No se pudo acceder a la cámara. Comprueba los permisos.</div>';
+    }
+  }
+
+  function pararGrabacion() {
+    if (mediaRecorder && mediaRecorder.state === "recording") mediaRecorder.stop();
+    clearInterval(timerInterval);
+    if (stream) stream.getTracks().forEach(t => t.stop());
+  }
+
+  function cancelar() {
+    pararGrabacion();
+    showStep("step-info");
+  }
+
+  function procesarVideo() {
+    const tipo = chunks[0]?.type || "video/webm";
+    videoBlob = new Blob(chunks, { type: tipo });
+    document.getElementById("video-replay").src = URL.createObjectURL(videoBlob);
+    const fecha = new Date().toISOString().split("T")[0];
+    const titulo = [limpiarTexto(formatoData.ot), limpiarTexto(formatoData.proyecto), limpiarTexto(formatoData.formato), fecha].filter(Boolean).join("_");
+    document.getElementById("titulo").value = titulo;
+    showStep("step-confirmar");
+  }
+
+  function repetir() { videoBlob = null; chunks = []; showStep("step-info"); }
+
+  function enviarWhatsApp() {
+    const titulo = document.getElementById("titulo").value.trim() || "video";
+    const proyecto = formatoData.ot ? formatoData.ot + " – " + formatoData.proyecto : formatoData.proyecto || "Sin proyecto";
+    const mensaje = "🎬 *Nuevo vídeo de producción*\n\n📁 Proyecto: " + proyecto + "\n📋 Formato: " + (formatoData.formato || "Sin formato") + "\n🏷️ Título: " + titulo + "\n📅 Fecha: " + new Date().toLocaleDateString("es-ES");
+
+    // Descargar vídeo en el móvil
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(videoBlob);
+    a.download = titulo + ".mp4";
+    a.click();
+
+    // Abrir WhatsApp con el mensaje
+    setTimeout(() => {
+      window.open("https://wa.me/" + WHATSAPP_NUMERO + "?text=" + encodeURIComponent(mensaje), "_blank");
+      showStep("step-exito");
+    }, 800);
+  }
+
+  function reiniciar() { videoBlob = null; chunks = []; showStep("step-info"); }
+</script>
+</body>
+</html>
